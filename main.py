@@ -1,8 +1,10 @@
 import json
 import os
-import time
+import threading
+import audios_main
 
 from kivy import Config
+from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
@@ -13,38 +15,15 @@ from kivy.uix.scrollview import ScrollView
 from kivymd.app import MDApp
 from kivymd.uix.button import MDFillRoundFlatIconButton, MDFlatButton
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.list import MDList, TwoLineAvatarListItem, ImageLeftWidget, OneLineRightIconListItem, \
-    ThreeLineAvatarListItem
+from kivymd.uix.list import MDList, ImageLeftWidget, OneLineRightIconListItem, ThreeLineAvatarListItem
 from kivymd.uix.navigationdrawer import MDNavigationDrawer
 from kivymd.uix.toolbar import MDToolbar
 
-import audios_main
 
-"""Config.set('resizable', 'width', '0')
-Config.set('resizable', 'height', '0')"""
 Config.set('graphics', 'width', '360')
 Config.set('graphics', 'height', '760')
 Config.write()
-
 Window.size = (360, 760)
-
-
-class ScrollVw(GridLayout):
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        layout = GridLayout(cols=1, spacing=10, padding=10, size_hint_y=None)
-        # Make sure the height is such that there is something to scroll.
-        layout.bind(minimum_height=layout.setter('height'))
-        try:
-            with open("data_audios.json", "r") as rf:
-                data = json.load(rf)
-        except Exception:
-            raise
-        for i in data:
-            btn = Button(text=i['title'], size_hint_y=None, height=40)
-            layout.add_widget(btn)
-        self.add_widget(layout)
 
 
 def delete_photos():
@@ -78,11 +57,6 @@ MainScreenManager:
                 MainScreenLayout:
                     id: mainscrlayout
                     orientation: 'vertical'
-                    MDToolbar:
-                        type: 'top'
-                        title: 'My music'
-                        elevation: 10
-                        left_action_items: [['menu', lambda x: nav_drawer.set_state('open')]]
                         
         NavDrawer:
             id: nav_drawer
@@ -110,11 +84,6 @@ MainScreenManager:
                         IconLeftWidget:
                             icon: 'sync'
                        
-                MDFillRoundFlatButton:
-                    text: "Login VK"
-                    font_size: "25sp"
-                    custom_color: 0, 1, 0, 1
-                    pos_hint: {'center_x': 0.33, 'center_y': 0.5}
                 Widget:
                     
 <LoginScreen>:
@@ -142,25 +111,23 @@ MainScreenManager:
                 font_size: '20sp'
                 
 <Content>
-    orientation: "horizontal"
-    spacing: 13
-    padding: 0
+    orientation: "vertical"
+    
+    Widget:
     
     MDSpinner:
         size_hint: None, None
-        size: dp(35), dp(35)
-        pos_hint: {'center_x': .2, 'center_y': .5}
+        size: dp(45), dp(45)
+        pos_hint: {'center_x': .5, 'center_y': 1}
         active: True
-    MDLabel:
-        text: "Loadind..."
-        pos_hint: {'center_x': .8, 'center_y': .5}
+    
+    Widget:
 
-                
+           
 """
 
 
 class MyApp(MDApp):
-
     dialog = None
 
     def __init__(self, **kw):
@@ -170,27 +137,8 @@ class MyApp(MDApp):
         screen = Builder.load_string(kv)
         return screen
 
-    def show_dialog_login(self):
-        self.dialog = MDDialog(type="custom",
-                               size_hint=(.7, .6),
-                               text="Do you want to sync your music?",
-                               buttons=[MDFlatButton(text="CANCEL",
-                                                     text_color=self.theme_cls.primary_color,
-                                                     on_press=self.dialog_close),
-                                        MDFlatButton(text="SYNC",
-                                                     text_color=self.theme_cls.primary_color,
-                                                     on_press=self.sync_music)], )
-        self.dialog.open()
-
-    def dialog_close(self, instance):
-        self.dialog.dismiss(force=True)
-
-    def sync_music(self, instance):
-        self.root.ids.mscr.ids.but.text = 'YESSSSSSSSSS'
-
     def open_nav_drawer(self):
         self.root.ids.mscr.ids.nav_drawer.set_state('open')
-
 
     def on_stop(self):
         delete_photos()
@@ -202,30 +150,44 @@ class MyApp(MDApp):
         delete_photos()
 
 
-class MainScreenLayout(BoxLayout):
+flag = None
 
+
+def sync(*args):
+    global flag
+    vk_session = audios_main.get_session()
+    if vk_session is None:
+        print('Session is None!')
+        audios_main.main()
+        audios_main.auth_vk()
+        vk_session = audios_main.get_session()
+    audios_main.update_audios(vk_session=vk_session)
+    flag = True
+
+
+class MainScreenLayout(BoxLayout):
     dialog = None
     dialog_spin = None
+    global flag, my
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.toolbar = MDToolbar(title='My music')
+        self.toolbar.elevation = 10
+        self.toolbar.type = 'top'
+        self.toolbar.left_action_items = [['menu', lambda x: my.root.ids.mscr.ids.nav_drawer.set_state('open')]]
+
+        self.add_widget(self.toolbar)
         self.add_scroll_widget()
-        """self.ToolBarOne = MDToolbar(title='My music',
-                                    elevation=10,
-                                    left_action_items=[['menu'],
-                                                       lambda x: MDApp.root.ids.mscr.ids.nav_drawer.set_state('open')])"""
-        """title: 'My music'
-        elevation: 10
-        left_action_items: [['menu', lambda x: nav_drawer.set_state('open')]]"""
 
     def add_scroll_widget(self):
         sc = ScrollOne()
-        self.sx = sc.getself()
-        self.add_widget(self.sx)
+        self.scroll_self = sc.get_self()
+        self.add_widget(self.scroll_self)
 
     def reload_scroll(self):
         try:
-            self.remove_widget(self.sx)
+            self.remove_widget(self.scroll_self)
             self.add_scroll_widget()
 
         except Exception as ex:
@@ -234,30 +196,31 @@ class MainScreenLayout(BoxLayout):
     def dialog_close(self, instance):
         self.dialog.dismiss()
 
-    def dialog_spin_(self):
-        self.dialog_spin = MDDialog(size_hint=(.45, None),
-                                    auto_dismiss=True,
+    def dialog_spin_func(self):
+        self.dialog_spin = MDDialog(title='Loading...',
+                                    size_hint=(.7, None),
+                                    auto_dismiss=False,
                                     type="custom",
                                     content_cls=Content())
         self.dialog_spin.open()
 
+    def check_flag(self, *args):
+        if flag:
+            self.dialog_spin.dismiss()
+            self.reload_scroll()
+            self.schedule.cancel()
+
     def sync_music(self, instance):
         self.dialog.dismiss()
-        self.dialog_spin_()
-        vk_session = audios_main.get_session()
-        if vk_session is None:
-            print('Session is None')
-            audios_main.main()
-            audios_main.auth_vk()
-            vk_session = audios_main.get_session()
-        audios_main.update_audios(vk_session=vk_session)
-        self.reload_scroll()
-        self.dialog_spin.dismiss()
-
+        self.dialog_spin_func()
+        threading.Thread(target=sync, daemon=True).start()
+        self.schedule = Clock.schedule_interval(self.check_flag, 1)
+        self.schedule()
 
     def show_dialog_login(self):
         self.dialog = MDDialog(type="custom",
-                               size_hint=(.7, .6),
+                               size_hint=(.7, None),
+                               auto_dismiss=False,
                                text="Do you want to sync your music?",
                                buttons=[MDFlatButton(text="CANCEL",
                                                      on_press=self.dialog_close),
@@ -283,19 +246,11 @@ class LoginScreen(Screen):
 
 
 class NavList(MDList):
-
-    def login(self):
-        import audios_main
-        pass
-
-    def test(self):
-        pass
+    pass
 
 
 class NavDrawer(MDNavigationDrawer):
-
-    def test(self):
-        print(1)
+    pass
 
 
 class ScrollOne(ScrollView):
@@ -343,9 +298,10 @@ class ScrollOne(ScrollView):
         except Exception as ex:
             print(ex)
 
-    def getself(self):
+    def get_self(self):
         return self
 
 
 if __name__ == '__main__':
-    MyApp().run()
+    my = MyApp()
+    my.run()
