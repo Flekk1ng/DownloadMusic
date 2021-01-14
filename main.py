@@ -150,11 +150,7 @@ class MyApp(MDApp):
         delete_photos()
 
 
-flag = None
-
-
 def sync(*args):
-    global flag
     vk_session = audios_main.get_session()
     if vk_session is None:
         print('Session is None!')
@@ -162,13 +158,12 @@ def sync(*args):
         audios_main.auth_vk()
         vk_session = audios_main.get_session()
     audios_main.update_audios(vk_session=vk_session)
-    flag = True
 
 
 class MainScreenLayout(BoxLayout):
     dialog = None
     dialog_spin = None
-    global flag, my
+    global my
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -204,8 +199,8 @@ class MainScreenLayout(BoxLayout):
                                     content_cls=Content())
         self.dialog_spin.open()
 
-    def check_flag(self, *args):
-        if flag:
+    def check_thr(self, *args):
+        if not self.thr.is_alive():
             self.dialog_spin.dismiss()
             self.reload_scroll()
             self.schedule.cancel()
@@ -213,8 +208,9 @@ class MainScreenLayout(BoxLayout):
     def sync_music(self, instance):
         self.dialog.dismiss()
         self.dialog_spin_func()
-        threading.Thread(target=sync, daemon=True).start()
-        self.schedule = Clock.schedule_interval(self.check_flag, 1)
+        self.thr = threading.Thread(target=sync, daemon=True)
+        self.thr.start()
+        self.schedule = Clock.schedule_interval(self.check_thr, 1)
         self.schedule()
 
     def show_dialog_login(self):
